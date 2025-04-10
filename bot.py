@@ -9,6 +9,7 @@ import random
 import telebot
 import os
 import shutil
+import sys
 
 # Setup logging
 logging.basicConfig(
@@ -18,6 +19,7 @@ logging.basicConfig(
 
 # Initialize bot with environment variable
 bot = telebot.TeleBot(os.environ.get('TELEGRAM_BOT_TOKEN'))
+logging.info(f"Bot initialized with token: {os.environ.get('TELEGRAM_BOT_TOKEN')[:10]}...")
 
 # Helper functions
 def wait_and_click(driver, by, value, timeout=10):
@@ -125,7 +127,6 @@ def handle_final_page(driver):
                     "//a[contains(text(), 'Get Link')]"))
             )
             driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", button)
-            driver.execute_script("arguments[0].style.border='2px solid red';", button)
             time.sleep(0.5)
             driver.execute_script("arguments[0].click();", button)
             logging.info("Clicked 'Get Link' button")
@@ -239,10 +240,16 @@ def handle_message(message):
     else:
         bot.reply_to(message, "❌ Failed to retrieve the final link.")
 
-# Run the bot
+# Run the bot with restart logic
 if __name__ == "__main__":
     logging.info("Starting bot...")
-    try:
-        bot.polling(none_stop=True, interval=0, timeout=20)
-    except Exception as e:
-        logging.error(f"Polling error: {str(e)}")
+    while True:
+        try:
+            bot.polling(none_stop=True, interval=0, timeout=20)
+        except Exception as e:
+            logging.error(f"Polling error: {str(e)}")
+            if "409" in str(e):  # Specific check for conflict
+                logging.error("Conflict detected! Ensure only one instance is running.")
+                time.sleep(5)  # Wait before retrying
+            else:
+                time.sleep(5)  # General error retry delay
