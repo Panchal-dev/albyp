@@ -9,6 +9,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 import time
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from selenium.common.exceptions import TimeoutException, WebDriverException
 
 # Setup logging
 logging.basicConfig(
@@ -26,13 +27,15 @@ def wait_and_click(driver, by, value, timeout=30):
         driver.execute_script("arguments[0].click();", element)
         logger.info(f"Clicked on element: {value}")
         return True
+    except TimeoutException:
+        logger.warning(f"Timeout waiting for element {value} to be clickable")
+        return False
     except Exception as e:
         logger.warning(f"Failed to click element {value}: {str(e)}")
         return False
 
 def close_popup(driver):
     try:
-        # close_btns = driver.find_elements(By.CLASS forensic_name, 'close')
         close_btns = driver.find_elements(By.CLASS_NAME, 'close')
         for btn in close_btns:
             try:
@@ -67,8 +70,8 @@ def close_popup(driver):
         logger.info(f"No popup found or error closing: {str(e)}")
     return False
 
-def wait_countdown(driver, seconds=10):
-    logger.info(f"Waiting {seconds} seconds for countdown...")
+def wait_countdown(driver, seconds=15):
+    logger.info(f"Waiting for countdown (default {seconds} seconds)...")
     try:
         countdown = WebDriverWait(driver, 5).until(
             EC.presence_of_element_located((By.ID, "tp-time"))
@@ -76,13 +79,20 @@ def wait_countdown(driver, seconds=10):
         remaining = int(countdown.text)
         logger.info(f"Detected dynamic countdown: {remaining} seconds remaining")
         time.sleep(remaining + 1)
-    except:
+        return True
+    except TimeoutException:
+        logger.info(f"No dynamic countdown found, waiting default {seconds} seconds")
         time.sleep(seconds + 1)
+        return True
+    except Exception as e:
+        logger.warning(f"Countdown wait failed: {str(e)}")
+        return False
 
 def handle_page(driver, step_num):
     logger.info(f"Processing Step {step_num}/4")
     
-    wait_countdown(driver)
+    if not wait_countdown(driver):
+        return False
     
     for _ in range(3):
         close_popup(driver)
@@ -91,10 +101,10 @@ def handle_page(driver, step_num):
     success = False
     
     if not success:
-        success = wait_and_click(driver, By.ID, "tp-snp2", timeout=5)
+        success = wait_and_click(driver, By.ID, "tp-snp2", timeout=10)
     
     if not success:
-        success = wait_and_click(driver, By.XPATH, "//button[contains(text(), 'Click here to proceed') or contains(text(), 'Proceed')]", timeout=5)
+        success = wait_and_click(driver, By.XPATH, "//button[contains(text(), 'Click here to proceed') or contains(text(), 'Proceed')]", timeout=10)
     
     if not success and step_num < 4:
         try:
@@ -110,7 +120,8 @@ def handle_page(driver, step_num):
 
 def handle_final_page(driver):
     logger.info("Processing Final Page (Step 4/4)...")
-    wait_countdown(driver)
+    if not wait_countdown(driver):
+        return None
     
     for _ in range(3):
         close_popup(driver)
@@ -148,6 +159,9 @@ def handle_final_page(driver):
             else:
                 logger.warning("Still on the same domain after click, trying again...")
                 
+        except TimeoutException:
+            logger.warning(f"Attempt {attempt} timed out waiting for 'Get Link' button")
+            time.sleep(3)
         except Exception as e:
             logger.warning(f"Attempt {attempt} failed: {str(e)}")
             time.sleep(3)
@@ -174,9 +188,9 @@ def handle_final_page(driver):
 
 def bypass_adrinolink(start_url):
     options = webdriver.ChromeOptions()
-    options.add_argument("--headless")  # Run in headless mode for Railway
-    options.add_argument("--no-sandbox")  # Required for Railway/Linux
-    options.add_argument("--disable-dev-shm-usage")  # Avoid shared memory issues
+    options.add_argument("--headless")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     options.add_argument("--start-maximized")
     options.add_argument("--disable-popup-blocking")
@@ -186,12 +200,17 @@ def bypass_adrinolink(start_url):
     options.add_experimental_option('useAutomationExtension', False)
 
     logger.info("Launching Chrome browser in headless mode...")
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-    driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+    try:
+        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+    except WebDriverException as e:
+        logger.error(f"Failed to launch Chrome: {str(e)}")
+        return None
     
     final_url = None
     
     try:
+        driver.set_page_load_timeout(30)  # Timeout for page loads
         driver.get(start_url)
         logger.info(f"Loaded initial URL: {start_url}")
         
@@ -204,6 +223,8 @@ def bypass_adrinolink(start_url):
             else:
                 final_url = handle_final_page(driver)
         
+    except TimeoutException:
+        logger.error("Page load timeout occurred")
     except Exception as e:
         logger.error(f"Error during bypass: {str(e)}")
     
