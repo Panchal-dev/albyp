@@ -19,7 +19,7 @@ logging.basicConfig(
 # Initialize bot with environment variable
 bot = telebot.TeleBot(os.environ.get('TELEGRAM_BOT_TOKEN'))
 
-# Helper functions (unchanged)
+# Helper functions
 def wait_and_click(driver, by, value, timeout=10):
     try:
         element = WebDriverWait(driver, timeout).until(
@@ -62,19 +62,21 @@ def close_popup(driver):
 
 def wait_countdown(driver):
     try:
-        countdown = WebDriverWait(driver, 5).until(
+        countdown = WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.ID, "tp-time"))
         )
         remaining = int(countdown.text.strip())
-        logging.info(f"Detected dynamic countdown: {remaining} seconds remaining")
+        logging.info(f"Detected countdown: {remaining} seconds remaining")
         while remaining > 0:
             time.sleep(1)
             remaining = int(driver.find_element(By.ID, "tp-time").text.strip())
             logging.debug(f"Countdown: {remaining} seconds remaining")
         time.sleep(1)
+        return True
     except Exception as e:
-        logging.warning(f"Using fallback countdown (10s): {str(e)}")
+        logging.warning(f"Countdown element not found, using 10s fallback: {str(e)}")
         time.sleep(10)
+        return False
 
 def handle_page(driver, step_num):
     logging.info(f"Processing Step {step_num}/4")
@@ -172,7 +174,7 @@ def bypass_adrinolink(start_url):
         shutil.which("google-chrome"),
         "/usr/lib/chromium/chromium",
         "/usr/bin/chromium",
-        "/nix/store/*-chromium-*/bin/chromium"  # Wildcard for Nix store (will need glob if used)
+        "/root/.nix-profile/bin/chromium"
     ]
     chrome_path = None
     for path in possible_chrome_paths:
@@ -180,13 +182,13 @@ def bypass_adrinolink(start_url):
             chrome_path = path
             break
     
-    chromedriver_path = shutil.which("chromedriver")
+    chromedriver_path = shutil.which("chromedriver") or "/root/.nix-profile/bin/chromedriver"
     
     if not chrome_path:
         logging.error("Chrome binary not found in any known locations")
         return None
-    if not chromedriver_path:
-        logging.error("ChromeDriver not found in PATH")
+    if not chromedriver_path or not os.path.exists(chromedriver_path):
+        logging.error("ChromeDriver not found or inaccessible")
         return None
 
     logging.info(f"Using Chrome at: {chrome_path}")
@@ -240,4 +242,7 @@ def handle_message(message):
 # Run the bot
 if __name__ == "__main__":
     logging.info("Starting bot...")
-    bot.polling(none_stop=True)
+    try:
+        bot.polling(none_stop=True, interval=0, timeout=20)
+    except Exception as e:
+        logging.error(f"Polling error: {str(e)}")
