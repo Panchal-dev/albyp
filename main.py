@@ -1,164 +1,215 @@
 import os
-import requests
+import logging
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
 import time
-from bs4 import BeautifulSoup
-import re
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-import logging
 
-# Set up logging for debugging
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+# Setup logging
+logging.basicConfig(
+    format='[%(asctime)s] [%(levelname)s] %(message)s',
+    level=logging.INFO
+)
 logger = logging.getLogger(__name__)
 
-class AdrinoBypass:
-    def __init__(self, short_url):
-        self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
-        })
-        self.short_url = short_url
-        self.base_url = "https://keedabankingnews.com"
-        self.final_url = None
-    
-    def get_hidden_input(self, soup, name):
-        input_tag = soup.find('input', {'name': name})
-        return input_tag['value'] if input_tag else None
-    
-    def handle_countdown(self, soup):
-        countdown_button = soup.find('button', {'id': 'countdown'}) or soup.find('div', {'id': 'countdown'})
-        if countdown_button:
-            time_span = countdown_button.find('span', {'id': 'tp-time'})
-            seconds = 15  # Default wait time
-            if time_span and time_span.text.strip():
-                try:
-                    seconds = int(time_span.text.strip())
-                except ValueError:
-                    logger.warning("Could not parse countdown time, defaulting to 15 seconds")
-            logger.info(f"Waiting {seconds} seconds for countdown...")
-            time.sleep(seconds + 2)  # Extra 2 seconds to account for popup loading
-            return True
+# Selenium functions
+def wait_and_click(driver, by, value, timeout=30):
+    try:
+        element = WebDriverWait(driver, timeout).until(
+            EC.element_to_be_clickable((by, value))
+        )
+        driver.execute_script("arguments[0].click();", element)
+        logger.info(f"Clicked on element: {value}")
+        return True
+    except Exception as e:
+        logger.warning(f"Failed to click element {value}: {str(e)}")
         return False
-    
-    def process_page(self, url, step, total_steps, form_data_name=None):
-        logger.info(f"Processing step {step}/{total_steps} at {url}")
-        
-        # Fetch the page
-        try:
-            response = self.session.get(url, timeout=20)
-            response.raise_for_status()
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to fetch page: {e}")
-            return None
-        
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # Handle countdown and wait for popup
-        if self.handle_countdown(soup):
+
+def close_popup(driver):
+    try:
+        close_btns = driver.find_elements(By.CLASS forensic_name, 'close')
+        for btn in close_btns:
             try:
-                response = self.session.get(url, timeout=20)  # Reload after countdown
-                soup = BeautifulSoup(response.text, 'html.parser')
-            except requests.exceptions.RequestException as e:
-                logger.error(f"Failed to reload page after countdown: {e}")
-                return None
-        
-        # Verify step
-        step_text = soup.find(string=re.compile(f"You are currently on step {step}/{total_steps}"))
-        if not step_text:
-            logger.warning(f"Step {step} verification failed, proceeding anyway...")
-        
-        # Step 4: Look for "Get Link" button
-        if step == total_steps:
-            get_link = soup.find('a', href=re.compile(r'/includes/open\.php\?id='))
-            if get_link:
-                final_path = get_link['href']
-                if not final_path.startswith('http'):
-                    final_path = f"{self.base_url}{final_path}"
-                self.final_url = final_path
-                logger.info(f"Found final link path: {self.final_url}")
-                try:
-                    final_response = self.session.get(self.final_url, allow_redirects=False, timeout=20)
-                    if final_response.status_code in [301, 302, 303, 307, 308]:
-                        telegram_url = final_response.headers['Location']
-                        logger.info(f"Success! Final Telegram URL: {telegram_url}")
-                        return telegram_url
-                except requests.exceptions.RequestException as e:
-                    logger.error(f"Failed to access final link: {e}")
-                return None
-            logger.warning("No 'Get Link' button found on final step")
-            return None
-        
-        # Steps 1-3: Find and submit the form
-        form = soup.find('form', {'name': 'tp'})
-        if not form:
-            logger.warning("No form found to proceed")
-            return None
-        
-        form_data = {}
-        if form_data_name:
-            hidden_value = self.get_hidden_input(soup, form_data_name)
-            if hidden_value:
-                form_data[form_data_name] = hidden_value
-            else:
-                logger.warning(f"No hidden input found for {form_data_name}")
-        
-        action_url = form.get('action', '')
-        if not action_url.startswith('http'):
-            action_url = f"{self.base_url}{action_url}"
-        
-        logger.info(f"Submitting form to: {action_url} with data: {form_data}")
-        try:
-            response = self.session.post(action_url, data=form_data, allow_redirects=False, timeout=20)
-            if response.status_code in [301, 302, 303, 307, 308]:
-                next_url = response.headers['Location']
-                logger.info(f"Redirected to: {next_url}")
-                return next_url
-            return response.url
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to submit form: {e}")
-            return None
+                if btn.is_displayed():
+                    btn.click()
+                    logger.info("Popup closed using class 'close'")
+                    time.sleep(1)
+                    return True
+            except:
+                continue
+
+        overlays = driver.find_elements(By.CLASS_NAME, 'overlay')
+        for overlay in overlays:
+            try:
+                if overlay.is_displayed():
+                    driver.execute_script("arguments[0].style.display = 'none';", overlay)
+                    logger.info("Overlay removed")
+                    time.sleep(1)
+            except:
+                continue
+
+        popups = driver.find_elements(By.CLASS_NAME, 'popup')
+        for popup in popups:
+            try:
+                if popup.is_displayed():
+                    driver.execute_script("arguments[0].style.display = 'none';", popup)
+                    logger.info("Popup removed")
+                    time.sleep(1)
+            except:
+                continue
+    except Exception as e:
+        logger.info(f"No popup found or error closing: {str(e)}")
+    return False
+
+def wait_countdown(driver, seconds=10):
+    logger.info(f"Waiting {seconds} seconds for countdown...")
+    try:
+        countdown = WebDriverWait(driver, 5).until(
+            EC.presence_of_element_located((By.ID, "tp-time"))
+        )
+        remaining = int(countdown.text)
+        logger.info(f"Detected dynamic countdown: {remaining} seconds remaining")
+        time.sleep(remaining + 1)
+    except:
+        time.sleep(seconds + 1)
+
+def handle_page(driver, step_num):
+    logger.info(f"Processing Step {step_num}/4")
     
-    def bypass(self):
-        logger.info(f"Starting bypass for {self.short_url}")
-        
-        # Step 0: Initial redirect from short URL
+    wait_countdown(driver)
+    
+    for _ in range(3):
+        close_popup(driver)
+        time.sleep(1)
+    
+    success = False
+    
+    if not success:
+        success = wait_and_click(driver, By.ID, "tp-snp2", timeout=5)
+    
+    if not success:
+        success = wait_and_click(driver, By.XPATH, "//button[contains(text(), 'Click here to proceed') or contains(text(), 'Proceed')]", timeout=5)
+    
+    if not success and step_num < 4:
         try:
-            response = self.session.get(self.short_url, allow_redirects=False, timeout=20)
-            if response.status_code in [301, 302, 303, 307, 308]:
-                current_url = response.headers['Location']
-                logger.info(f"Initial redirect to: {current_url}")
+            form = driver.find_element(By.TAG_NAME, "form")
+            driver.execute_script("arguments[0].submit();", form)
+            logger.info("Form submitted via JavaScript")
+            success = True
+        except Exception as e:
+            logger.warning(f"Failed to submit form: {str(e)}")
+    
+    time.sleep(3)
+    return success
+
+def handle_final_page(driver):
+    logger.info("Processing Final Page (Step 4/4)...")
+    wait_countdown(driver)
+    
+    for _ in range(3):
+        close_popup(driver)
+        time.sleep(1)
+    
+    final_url = None
+    max_attempts = 3
+    attempt = 0
+    
+    while attempt < max_attempts and not final_url:
+        attempt += 1
+        logger.info(f"Attempt {attempt} to get final link...")
+        
+        try:
+            button = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH, 
+                    "//a[contains(@href, '/includes/open.php')]//button[contains(text(), 'Get Link')] | "
+                    "//button[contains(text(), 'Get Link')] | "
+                    "//a[contains(text(), 'Get Link')]"))
+            )
+            
+            driver.execute_script("arguments[0].scrollIntoView(true);", button)
+            time.sleep(1)
+            
+            driver.execute_script("arguments[0].click();", button)
+            logger.info("Clicked 'Get Link' button")
+            
+            time.sleep(5)
+            
+            current_url = driver.current_url
+            if "keedabankingnews.com" not in current_url:
+                final_url = current_url
+                logger.info(f"Successfully redirected to final URL: {final_url}")
+                break
             else:
-                current_url = self.short_url
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to access short URL: {e}")
-            return None
+                logger.warning("Still on the same domain after click, trying again...")
+                
+        except Exception as e:
+            logger.warning(f"Attempt {attempt} failed: {str(e)}")
+            time.sleep(3)
+    
+    if not final_url:
+        try:
+            link = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.XPATH, 
+                    "//a[contains(@href, '/includes/open.php')]"))
+            )
+            final_url = link.get_attribute("href")
+            logger.info(f"Extracted final URL from link: {final_url}")
+            
+            if final_url:
+                driver.get(final_url)
+                time.sleep(3)
+                final_url = driver.current_url
+                logger.info(f"Final URL after direct visit: {final_url}")
+                
+        except Exception as e:
+            logger.error(f"Failed to extract final URL: {str(e)}")
+    
+    return final_url
+
+def bypass_adrinolink(start_url):
+    options = webdriver.ChromeOptions()
+    options.add_argument("--headless")  # Run in headless mode for Railway
+    options.add_argument("--no-sandbox")  # Required for Railway/Linux
+    options.add_argument("--disable-dev-shm-usage")  # Avoid shared memory issues
+    options.add_argument("--disable-gpu")
+    options.add_argument("--start-maximized")
+    options.add_argument("--disable-popup-blocking")
+    options.add_argument("--disable-notifications")
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
+    options.add_experimental_option('useAutomationExtension', False)
+
+    logger.info("Launching Chrome browser in headless mode...")
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+    driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+    
+    final_url = None
+    
+    try:
+        driver.get(start_url)
+        logger.info(f"Loaded initial URL: {start_url}")
         
-        # Define steps based on your structure
-        steps = [
-            (1, 'tp2'),  # Step 1
-            (2, 'tp3'),  # Step 2
-            (3, 'tp4'),  # Step 3
-            (4, None),   # Step 4 (Get Link)
-        ]
+        for step in range(1, 5):
+            if step < 4:
+                if not handle_page(driver, step):
+                    logger.error(f"Failed to process step {step}")
+                    break
+                time.sleep(2)
+            else:
+                final_url = handle_final_page(driver)
         
-        # Process each step
-        for step, form_data_name in steps:
-            result = self.process_page(current_url, step, 4, form_data_name)
-            if isinstance(result, str) and result.startswith('http'):
-                current_url = result
-            elif result is None:
-                logger.error(f"Failed at step {step}")
-                return None
-            elif step == 4 and result:  # Final Telegram URL
-                return result
-        
-        logger.error("Failed to extract final URL after all steps")
-        return None
+    except Exception as e:
+        logger.error(f"Error during bypass: {str(e)}")
+    
+    finally:
+        driver.quit()
+    
+    return final_url
 
 # Telegram Bot Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -175,13 +226,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text("Processing your link, please wait... (this may take up to a minute)")
     
-    bypasser = AdrinoBypass(message_text)
-    final_url = bypasser.bypass()
+    final_url = bypass_adrinolink(message_text)
     
     if final_url:
         await update.message.reply_text(f"Success! Final URL: {final_url}")
     else:
-        await update.message.reply_text("Failed to bypass the link. The link might be invalid or the site structure has changed.")
+        await update.message.reply_text("Failed to bypass the link. Please check the URL or try again later.")
 
 def main():
     token = os.getenv("TELEGRAM_BOT_TOKEN")
