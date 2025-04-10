@@ -19,7 +19,7 @@ logging.basicConfig(
 # Initialize bot with environment variable
 bot = telebot.TeleBot(os.environ.get('TELEGRAM_BOT_TOKEN'))
 
-# Helper functions from your script
+# Helper functions (unchanged)
 def wait_and_click(driver, by, value, timeout=10):
     try:
         element = WebDriverWait(driver, timeout).until(
@@ -156,7 +156,7 @@ def handle_final_page(driver):
 
 def bypass_adrinolink(start_url):
     options = webdriver.ChromeOptions()
-    options.add_argument("--headless")  # Required for Railway
+    options.add_argument("--headless")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
@@ -167,11 +167,23 @@ def bypass_adrinolink(start_url):
     options.add_experimental_option('useAutomationExtension', False)
 
     # Dynamically locate Chrome and ChromeDriver
-    chrome_path = shutil.which("google-chrome") or "/usr/lib/chromium/chrome"
-    chromedriver_path = shutil.which("chromedriver") or "/usr/lib/chromium/chromedriver"
+    possible_chrome_paths = [
+        shutil.which("chromium"),
+        shutil.which("google-chrome"),
+        "/usr/lib/chromium/chromium",
+        "/usr/bin/chromium",
+        "/nix/store/*-chromium-*/bin/chromium"  # Wildcard for Nix store (will need glob if used)
+    ]
+    chrome_path = None
+    for path in possible_chrome_paths:
+        if path and os.path.exists(path):
+            chrome_path = path
+            break
+    
+    chromedriver_path = shutil.which("chromedriver")
     
     if not chrome_path:
-        logging.error("Chrome binary not found in PATH")
+        logging.error("Chrome binary not found in any known locations")
         return None
     if not chromedriver_path:
         logging.error("ChromeDriver not found in PATH")
