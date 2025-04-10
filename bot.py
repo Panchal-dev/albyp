@@ -64,7 +64,7 @@ def close_popup(driver):
 
 def wait_countdown(driver):
     try:
-        countdown = WebDriverWait(driver, 10).until(
+        countdown = WebDriverWait(driver, 15).until(
             EC.presence_of_element_located((By.ID, "tp-time"))
         )
         remaining = int(countdown.text.strip())
@@ -166,6 +166,9 @@ def bypass_adrinolink(start_url):
     options.add_argument("--disable-popup-blocking")
     options.add_argument("--disable-notifications")
     options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_argument("--remote-debugging-port=9222")  # Helps with DevTools stability
+    options.add_argument("--disable-extensions")
+    options.add_argument("--window-size=1920,1080")
     options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
     options.add_experimental_option('useAutomationExtension', False)
 
@@ -198,11 +201,12 @@ def bypass_adrinolink(start_url):
     options.binary_location = chrome_path
     service = Service(executable_path=chromedriver_path)
     
-    driver = webdriver.Chrome(service=service, options=options)
-    driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-    
-    final_url = None
+    driver = None
     try:
+        driver = webdriver.Chrome(service=service, options=options)
+        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+        
+        final_url = None
         driver.get(start_url)
         logging.info(f"Loaded initial URL: {start_url}")
         for step in range(1, 5):
@@ -213,12 +217,16 @@ def bypass_adrinolink(start_url):
                 time.sleep(random.uniform(1, 2))
             else:
                 final_url = handle_final_page(driver)
+        return final_url
     except Exception as e:
         logging.error(f"Error during bypass: {str(e)}")
+        return None
     finally:
-        driver.quit()
-    
-    return final_url
+        if driver:
+            try:
+                driver.quit()
+            except Exception as e:
+                logging.warning(f"Error quitting driver: {str(e)}")
 
 # Telegram bot handlers
 @bot.message_handler(commands=['start'])
@@ -248,8 +256,8 @@ if __name__ == "__main__":
             bot.polling(none_stop=True, interval=0, timeout=20)
         except Exception as e:
             logging.error(f"Polling error: {str(e)}")
-            if "409" in str(e):  # Specific check for conflict
-                logging.error("Conflict detected! Ensure only one instance is running.")
-                time.sleep(5)  # Wait before retrying
+            if "409" in str(e):
+                logging.error("Conflict detected! Please ensure only one instance is running or use a new token.")
+                time.sleep(10)  # Longer delay to allow manual intervention
             else:
-                time.sleep(5)  # General error retry delay
+                time.sleep(5)
