@@ -124,7 +124,7 @@ def handle_page(driver, step_num):
     if not success:
         success = wait_and_click(driver, By.XPATH, 
             "//button[contains(text(), 'Click here to proceed') or contains(text(), 'Proceed')]", 
-            timeout=5)  # Fixed: removed "tribunals"
+            timeout=5)
     
     if not success and step_num < 4:
         try:
@@ -222,12 +222,16 @@ async def bypass_adrinolink(start_url, update, context):
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
     options.add_experimental_option('useAutomationExtension', False)
-    # Specify Chromium binary location for Railway
-    options.binary_location = "/nix/store/*/chromium*/bin/chromium"  # Adjust based on Railway's Nix path
+    # Use Chromium installed by Nixpacks
+    options.binary_location = "/usr/bin/chromium"  # Common Nix path for Chromium
 
     logger.info("Launching Chrome browser in headless mode...")
     try:
-        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+        # Install ChromeDriver and explicitly set executable path if needed
+        driver_path = ChromeDriverManager().install()
+        logger.info(f"ChromeDriver installed at: {driver_path}")
+        service = Service(executable_path=driver_path)
+        driver = webdriver.Chrome(service=service, options=options)
         driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
     except Exception as e:
         logger.error(f"Failed to launch Chrome: {str(e)}")
@@ -325,7 +329,7 @@ def main():
         except Exception as e:
             logger.error(f"Polling failed (attempt {attempt + 1}/{max_retries}): {str(e)}")
             if attempt < max_retries - 1:
-                time.sleep(5)  # Wait before retrying
+                time.sleep(5)
             else:
                 logger.error("Max retries reached. Bot failed to start.")
 
