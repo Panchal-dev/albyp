@@ -4,11 +4,10 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
 import time
 import random
 import telebot
-from telebot import types
+import os
 
 # Setup logging
 logging.basicConfig(
@@ -16,10 +15,10 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-# Initialize bot
-bot = telebot.TeleBot('7710211536:AAG4ursFUqa4jzQEcVjk9vn4a-yVHYBcYII')  # Replace with your bot token
+# Initialize bot with your token
+bot = telebot.TeleBot(os.environ.get('TELEGRAM_BOT_TOKEN'))  # Use environment variable
 
-# Same helper functions as in your original code
+# Helper functions (same as before)
 def wait_and_click(driver, by, value, timeout=10):
     try:
         element = WebDriverWait(driver, timeout).until(
@@ -34,7 +33,6 @@ def wait_and_click(driver, by, value, timeout=10):
         return False
 
 def close_popup(driver):
-    # Same implementation as original
     try:
         overlays = driver.find_elements(By.CLASS_NAME, 'overlay')
         for overlay in overlays:
@@ -62,7 +60,6 @@ def close_popup(driver):
     return False
 
 def wait_countdown(driver):
-    # Same implementation as original
     try:
         countdown = WebDriverWait(driver, 5).until(
             EC.presence_of_element_located((By.ID, "tp-time"))
@@ -76,7 +73,6 @@ def wait_countdown(driver):
         time.sleep(10)
 
 def handle_page(driver, step_num):
-    # Same implementation as original
     wait_countdown(driver)
     for _ in range(3):
         close_popup(driver)
@@ -100,7 +96,6 @@ def handle_page(driver, step_num):
     return success
 
 def handle_final_page(driver):
-    # Same implementation as original
     wait_countdown(driver)
     for _ in range(3):
         close_popup(driver)
@@ -145,12 +140,19 @@ def handle_final_page(driver):
 
 def bypass_adrinolink(start_url):
     options = webdriver.ChromeOptions()
-    options.add_argument("--headless")  # Headless mode for server
+    options.add_argument("--headless")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+    # Specify Chrome and ChromeDriver paths manually
+    chrome_path = "/usr/bin/google-chrome"  # Where Chrome will be installed
+    chromedriver_path = "/usr/local/bin/chromedriver"  # Where we'll copy ChromeDriver
+    
+    options.binary_location = chrome_path
+    service = Service(executable_path=chromedriver_path)
+    
+    driver = webdriver.Chrome(service=service, options=options)
     
     final_url = None
     try:
@@ -191,4 +193,5 @@ def handle_message(message):
 
 # Run the bot
 if __name__ == "__main__":
+    logging.info("Starting bot...")
     bot.polling(none_stop=True)
