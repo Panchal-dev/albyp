@@ -267,7 +267,7 @@ async def bypass_adrinolink(start_url, update, context):
 # Telegram Bot Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "1: Hello! Send me an Adrino link (e.g., https://adrinolinks.in/HucM6) to bypass it. Use /stop to halt the current process."
+        "2: Hello! Send me an Adrino link (e.g., https://adrinolinks.in/HucM6) to bypass it. Use /stop to halt the current process."
     )
 
 async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
