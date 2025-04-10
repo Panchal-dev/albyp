@@ -238,7 +238,7 @@ async def bypass_adrinolink(start_url, update, context):
     final_url = None
     
     try:
-        driver.set_page_load_timeout(30)  # Prevent infinite load hangs
+        driver.set_page_load_timeout(30)
         driver.get(start_url)
         logger.info(f"Loaded initial URL: {start_url}")
         
@@ -273,7 +273,7 @@ async def bypass_adrinolink(start_url, update, context):
 # Telegram Bot Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "3: Hello! Send me an Adrino link (e.g., https://adrinolinks.in/HucM6) to bypass it. Use /stop to halt the current process."
+        "4: Hello! Send me an Adrino link (e.g., https://adrinolinks.in/HucM6) to bypass it. Use /stop to halt the current process."
     )
 
 async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -308,6 +308,7 @@ def main():
         logger.error("TELEGRAM_BOT_TOKEN not set in environment variables")
         return
     
+    logger.info("Starting fresh deployment...")  # Added for debugging
     application = Application.builder().token(token).build()
     
     application.add_handler(CommandHandler("start", start))
