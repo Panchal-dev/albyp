@@ -124,7 +124,7 @@ def handle_page(driver, step_num):
     if not success:
         success = wait_and_click(driver, By.XPATH, 
             "//button[contains(text(), 'Click here to proceed') or contains(text(), 'Proceed')]", 
-            timeout=5)
+            timeout=5)  # Fixed: removed "tribunals"
     
     if not success and step_num < 4:
         try:
@@ -222,6 +222,8 @@ async def bypass_adrinolink(start_url, update, context):
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
     options.add_experimental_option('useAutomationExtension', False)
+    # Specify Chromium binary location for Railway
+    options.binary_location = "/nix/store/*/chromium*/bin/chromium"  # Adjust based on Railway's Nix path
 
     logger.info("Launching Chrome browser in headless mode...")
     try:
@@ -273,7 +275,7 @@ async def bypass_adrinolink(start_url, update, context):
 # Telegram Bot Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "4: Hello! Send me an Adrino link (e.g., https://adrinolinks.in/HucM6) to bypass it. Use /stop to halt the current process."
+        "Hello! Send me an Adrino link (e.g., https://adrinolinks.in/HucM6) to bypass it. Use /stop to halt the current process."
     )
 
 async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -308,15 +310,24 @@ def main():
         logger.error("TELEGRAM_BOT_TOKEN not set in environment variables")
         return
     
-    logger.info("Starting fresh deployment...")  # Added for debugging
-    application = Application.builder().token(token).build()
-    
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("stop", stop))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    
-    logger.info("Bot is starting...")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    logger.info("Starting fresh deployment...")
+    max_retries = 5
+    for attempt in range(max_retries):
+        try:
+            application = Application.builder().token(token).build()
+            application.add_handler(CommandHandler("start", start))
+            application.add_handler(CommandHandler("stop", stop))
+            application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+            
+            logger.info("Bot is starting...")
+            application.run_polling(allowed_updates=Update.ALL_TYPES)
+            break
+        except Exception as e:
+            logger.error(f"Polling failed (attempt {attempt + 1}/{max_retries}): {str(e)}")
+            if attempt < max_retries - 1:
+                time.sleep(5)  # Wait before retrying
+            else:
+                logger.error("Max retries reached. Bot failed to start.")
 
 if __name__ == "__main__":
     main()
