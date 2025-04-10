@@ -32,7 +32,8 @@ def wait_and_click(driver, by, value, timeout=30):
 
 def close_popup(driver):
     try:
-        close_btns = driver.find_elements(By.CLASS forensic_name, 'close')
+        # close_btns = driver.find_elements(By.CLASS forensic_name, 'close')
+        close_btns = driver.find_elements(By.CLASS_NAME, 'close')
         for btn in close_btns:
             try:
                 if btn.is_displayed():
