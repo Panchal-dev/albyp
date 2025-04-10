@@ -15,6 +15,7 @@ from threading import Event, Lock
 # Setup logging
 logging.basicConfig(
     format='[%(asctime)s] [%(levelname)s] %(message)s',
+    datefmt='%H:%M:%S',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
@@ -208,6 +209,8 @@ def handle_final_page(driver):
 
 async def bypass_adrinolink(start_url, update, context):
     global current_process
+    logger.info(f"Starting bypass for URL: {start_url}")
+    
     options = webdriver.ChromeOptions()
     options.add_argument("--headless")
     options.add_argument("--no-sandbox")
@@ -291,10 +294,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         
         await update.message.reply_text("Processing your link, please wait... (this may take up to a minute)")
-        context.job_queue.run_once(
-            lambda ctx: bypass_adrinolink(message_text, update, context),
-            0
-        )
+        # Run directly instead of using job_queue to avoid dependency issues
+        await bypass_adrinolink(message_text, update, context)
 
 def main():
     token = os.getenv("TELEGRAM_BOT_TOKEN")
