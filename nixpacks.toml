@@ -3,8 +3,7 @@ nixPkgs = ["python312", "google-chrome", "chromedriver"]
 
 [phases.build]
 cmds = [
-    "pip install -r requirements.txt",
-    "chmod +x /usr/local/bin/chromedriver"  # Ensure ChromeDriver is executable
+    "pip install -r requirements.txt"
 ]
 
 [start]

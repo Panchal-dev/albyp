@@ -8,6 +8,7 @@ import time
 import random
 import telebot
 import os
+import shutil
 
 # Setup logging
 logging.basicConfig(
@@ -18,7 +19,7 @@ logging.basicConfig(
 # Initialize bot with your token
 bot = telebot.TeleBot(os.environ.get('TELEGRAM_BOT_TOKEN'))  # Use environment variable
 
-# Helper functions (same as before)
+# Helper functions (unchanged)
 def wait_and_click(driver, by, value, timeout=10):
     try:
         element = WebDriverWait(driver, timeout).until(
@@ -145,11 +146,20 @@ def bypass_adrinolink(start_url):
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     
-    # Specify Chrome and ChromeDriver paths manually
-    chrome_path = "/usr/bin/google-chrome"  # Where Chrome will be installed
-    chromedriver_path = "/usr/local/bin/chromedriver"  # Where we'll copy ChromeDriver
-    
+    # Locate Chrome binary
+    chrome_path = "/usr/bin/google-chrome"
+    if not os.path.exists(chrome_path):
+        logging.error("Chrome binary not found at /usr/bin/google-chrome")
+        return None
     options.binary_location = chrome_path
+    
+    # Locate ChromeDriver (installed by nixpkgs)
+    chromedriver_path = shutil.which("chromedriver")
+    if not chromedriver_path:
+        logging.error("ChromeDriver not found in PATH")
+        return None
+    
+    logging.info(f"Using ChromeDriver at: {chromedriver_path}")
     service = Service(executable_path=chromedriver_path)
     
     driver = webdriver.Chrome(service=service, options=options)
