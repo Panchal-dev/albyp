@@ -224,8 +224,13 @@ async def bypass_adrinolink(start_url, update, context):
     options.add_experimental_option('useAutomationExtension', False)
 
     logger.info("Launching Chrome browser in headless mode...")
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-    driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+    try:
+        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+    except Exception as e:
+        logger.error(f"Failed to launch Chrome: {str(e)}")
+        await update.message.reply_text("Failed to initialize browser. Please try again later.")
+        return
     
     current_process = driver
     stop_event.clear()
@@ -233,6 +238,7 @@ async def bypass_adrinolink(start_url, update, context):
     final_url = None
     
     try:
+        driver.set_page_load_timeout(30)  # Prevent infinite load hangs
         driver.get(start_url)
         logger.info(f"Loaded initial URL: {start_url}")
         
@@ -267,7 +273,7 @@ async def bypass_adrinolink(start_url, update, context):
 # Telegram Bot Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "2: Hello! Send me an Adrino link (e.g., https://adrinolinks.in/HucM6) to bypass it. Use /stop to halt the current process."
+        "Hello! Send me an Adrino link (e.g., https://adrinolinks.in/HucM6) to bypass it. Use /stop to halt the current process."
     )
 
 async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -294,7 +300,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         
         await update.message.reply_text("Processing your link, please wait... (this may take up to a minute)")
-        # Run directly instead of using job_queue to avoid dependency issues
         await bypass_adrinolink(message_text, update, context)
 
 def main():
